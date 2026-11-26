@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>城市美食地圖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css">
+<style>
+:root{
+  --bg:#122120; --panel:#1b2f2d; --panel-2:#243b38; --line:#33504c;
+  --text:#e9f0ea; --muted:#9db3ad;
+  --want:#f2b84b; --revisit:#ef7f8a; --visited:#7fc4ad;
+  --accent:#f2b84b;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:400 15px/1.6 "Noto Sans TC",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{background:#1a2c2a;border-bottom:1px solid var(--line)}
+.top .wrap{padding-top:28px}
+h1{margin:0;font-weight:900;font-size:clamp(30px,5vw,46px);letter-spacing:.02em;line-height:1.15}
+#sub{margin:6px 0 20px;color:var(--muted)}
+.tabs{display:flex;gap:6px}
+.tab{appearance:none;border:0;background:transparent;color:var(--muted);font:500 16px "Noto Sans TC",sans-serif;
+  padding:11px 20px;border-radius:12px 12px 0 0;cursor:pointer}
+.tab .n{margin-left:8px;font-size:13px;background:var(--panel-2);padding:1px 9px;border-radius:99px}
+.tab[aria-selected="true"]{background:var(--bg);color:var(--text)}
+
+/* map + filters */
+.stage{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:24px;margin:24px 0 8px}
+#map{height:480px;border-radius:16px;border:1px solid var(--line);background:#172640;z-index:0}
+.leaflet-container{background:#172640}
+.panel{display:flex;flex-direction:column;gap:14px}
+.search{width:100%;padding:12px 18px;border-radius:99px;border:1px solid var(--line);background:var(--panel);
+  color:var(--text);font:inherit}
+.search::placeholder{color:var(--muted)}
+.group h2{margin:0 0 8px;font-size:14px;font-weight:500;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--text);
+  font:inherit;font-size:14px;padding:5px 14px;border-radius:99px;cursor:pointer}
+.chip .n{margin-left:6px;color:var(--muted);font-size:12px}
+.chip[aria-pressed="true"]{background:var(--visited);border-color:var(--visited);color:#0e1f1d}
+.chip[aria-pressed="true"] .n{color:#27463f}
+#districts{max-height:132px;overflow:auto}
+.hint{font-size:13px;color:var(--muted)}
+#nocoord{font-size:13px;color:var(--muted);margin:0}
+
+/* list */
+.bar{display:flex;justify-content:space-between;align-items:center;margin:20px 0 6px}
+#count{color:var(--muted)}
+select{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:99px;
+  padding:7px 14px;font:inherit;font-size:14px}
+.gh{display:flex;align-items:baseline;gap:10px;margin:28px 0 12px;font-size:19px;font-weight:900}
+.gh small{font-weight:400;font-size:14px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:6px}
+.card h3{margin:0;font-size:17px;font-weight:500;line-height:1.4}
+.meta{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--muted);font-size:13px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.rate{color:var(--accent);font-weight:500}
+.note{margin:2px 0;font-size:14px}
+.must{font-size:14px;color:var(--text)}
+.must b{font-weight:500;color:var(--accent)}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto;padding-top:10px}
+.btn{font:inherit;font-size:13px;text-decoration:none;color:var(--text);background:transparent;cursor:pointer;
+  border:1px solid var(--line);border-radius:99px;padding:4px 13px}
+.btn:hover:not([disabled]){background:var(--panel-2)}
+.btn[disabled]{opacity:.4;cursor:not-allowed}
+.cover{display:block;position:relative;margin:-16px -18px 8px;width:calc(100% + 36px);padding:0;border:0;cursor:zoom-in;
+  background:var(--panel-2);border-radius:14px 14px 0 0;overflow:hidden;aspect-ratio:16/10}
+.cover img{width:100%;height:100%;object-fit:cover;display:block}
+.cover .cnt{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;padding:1px 9px;border-radius:99px}
+.cover .cnt:empty{display:none}
+#lb{position:fixed;inset:0;background:rgba(8,14,13,.92);z-index:2000;overflow:auto;padding:56px 16px 24px;text-align:center}
+#lb[hidden]{display:none}
+#lb img{display:block;max-width:min(900px,100%);margin:0 auto 14px;border-radius:10px}
+#lbx{position:fixed;top:12px;right:16px;font-size:26px;background:none;border:0;color:#fff;cursor:pointer}
+.tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+#geomsg{font-size:13px;color:var(--muted)}
+.empty{padding:48px 0;text-align:center;color:var(--muted)}
+
+/* leaflet tweaks */
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--panel);color:var(--text)}
+.leaflet-popup-content{margin:12px 14px;font:400 14px/1.5 "Noto Sans TC",sans-serif}
+.leaflet-popup-content a{color:var(--accent)}
+.marker-cluster{background:rgba(255,255,255,.16)}
+.marker-cluster div{background:#86a09a;border:2px solid #fff;color:#14231f;font-weight:700;line-height:26px}
+
+@media (max-width:860px){
+  .stage{grid-template-columns:1fr}
+  #map{height:360px}
+}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>城市美食地圖</h1>
+    <p id="sub">載入中…</p>
+    <div class="tabs" role="tablist" id="tabs"></div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="stage">
+    <div id="map" aria-label="美食地圖"></div>
+    <div class="panel">
+      <input id="q" class="search" type="search" placeholder="搜尋店名、區域、必點、心得…" aria-label="搜尋">
+      <div class="group"><h2>城市</h2><div class="chips" id="cities"></div></div>
+      <div class="group"><h2>行政區</h2><div class="chips" id="districts"></div></div>
+      <div class="group"><h2>時段</h2><div class="chips" id="times"></div></div>
+      <div class="group"><h2>菜系</h2><div class="chips" id="cuisines"></div></div>
+      <div class="group"><h2>情境</h2><div class="chips" id="scenes"></div></div>
+      <p id="nocoord"></p>
+    </div>
+  </section>
+
+  <div class="bar">
+    <span id="count"></span>
+    <div class="tools">
+      <span id="geomsg"></span>
+      <select id="radius" aria-label="距離範圍" hidden>
+        <option value="0">全部距離</option>
+        <option value="1">1 公里內</option>
+        <option value="3">3 公里內</option>
+        <option value="5">5 公里內</option>
+        <option value="10">10 公里內</option>
+      </select>
+      <button class="btn" id="near">📍 找附近</button>
+      <select id="sort" aria-label="排序">
+        <option value="group">依類別分組</option>
+        <option value="rating">評分高到低</option>
+        <option value="db">資料庫順序</option>
+        <option value="near" disabled>離我最近</option>
+      </select>
+    </div>
+  </div>
+  <div id="list"></div>
+</main>
+
+<div id="lb" hidden><button id="lbx" aria-label="關閉">✕</button><div id="lbimgs"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script>
+const STATUS = {
+  want:    {label:'想去', color:'#f2b84b'},
+  revisit: {label:'回訪', color:'#ef7f8a'},
+  visited: {label:'去過', color:'#7fc4ad'},
+};
+const TABS = [
+  {key:'eaten', label:'吃過', test:p => p.status !== 'want'},
+  {key:'want',  label:'想去', test:p => p.status === 'want'},
+  {key:'all',   label:'全部', test:() => true},
+];
+
+let ALL = [], state = {tab:'eaten', city:'', district:'', time:'', cuisine:'', scene:'', q:'', sort:'group', radius:0};
+const TIME_ORDER = ['早餐','早午餐','午餐','下午茶','晚餐','宵夜','點心'];
+let userPos = null, userMarker = null;
+const markers = new Map();
+let map, cluster, firstFit = true;
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const hasXY = p => p.lat != null && p.lng != null;
+const navUrl = p => hasXY(p)
+  ? `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`
+  : `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(p.name + ' ' + p.city + p.district)}`;
+
+function initMap(){
+  map = L.map('map', {zoomControl:true, minZoom:6, maxZoom:13}).setView([23.7, 121.0], 7);
+  map.createPane('boundary').style.zIndex = 250;     // 行政區界放在圖釘下面
+  map.attributionControl.addAttribution('行政區界：內政部國土測繪中心');
+  cluster = L.markerClusterGroup({showCoverageOnHover:false, maxClusterRadius:45});
+  map.addLayer(cluster);
+}
+
+async function loadBoundaries(){
+  try{
+    const topo = await (await fetch('towns-10t.json')).json();
+    L.geoJSON(topojson.feature(topo, topo.objects.towns), {
+      pane:'boundary', interactive:false,
+      style:{fillColor:'#2c3533', fillOpacity:1, color:'#6b7a77', weight:.6, opacity:.75}
+    }).addTo(map);
+    L.geoJSON(topojson.feature(topo, topo.objects.counties), {
+      pane:'boundary', interactive:false,
+      style:{fill:false, color:'#93a29f', weight:1.2, opacity:.85}
+    }).addTo(map);
+  }catch(e){
+    console.warn('讀不到 towns-10t.json，地圖只會顯示圖釘', e);
+  }
+}
+
+function popupHtml(p){
+  const s = STATUS[p.status];
+  const pic = p.images && p.images.length ? `<img src="${esc(p.images[0])}" alt="" style="display:block;width:100%;max-width:230px;border-radius:8px;margin-bottom:8px">` : '';
+  return `${pic}<b>${esc(p.name)}</b><br>
+    <span style="color:${s.color}">${s.label}</span>${p.rating ? ' ・ ★ ' + p.rating : ''}・${esc(p.district)}
+    ${p.note ? `<br>${esc(p.note)}` : ''}
+    <br><a href="${esc(p.gmaps)}" target="_blank" rel="noopener">Google 地圖</a>・<a href="${navUrl(p)}" target="_blank" rel="noopener">導航</a>`;
+}
+
+function buildMarkers(){
+  ALL.filter(hasXY).forEach(p => {
+    const m = L.circleMarker([p.lat, p.lng], {
+      radius:8, weight:2, color:'#122120', fillColor:STATUS[p.status].color, fillOpacity:.95
+    }).bindPopup(popupHtml(p));
+    markers.set(p.id, m);
+  });
+}
+
+// skip：算某一排 chip 的數字時，略過那一排自己的條件，其餘條件都算進去
+function match(p, skip){
+  const tab = TABS.find(t => t.key === state.tab);
+  const q = state.q.trim().toLowerCase();
+  return tab.test(p) &&
+    (skip === 'city'    || !state.city    || p.city === state.city) &&
+    (skip === 'district'|| !state.district || p.district === state.district) &&
+    (skip === 'time'    || !state.time    || p.times.includes(state.time)) &&
+    (skip === 'cuisine' || !state.cuisine || p.cuisines.includes(state.cuisine)) &&
+    (skip === 'scene'   || !state.scene   || p.scenes.includes(state.scene)) &&
+    (!state.radius || !userPos || (p.dist != null && p.dist <= state.radius)) &&
+    (!q || [p.name,p.city,p.district,p.must,p.note,p.category,...p.cuisines].join(' ').toLowerCase().includes(q));
+}
+const filtered = () => ALL.filter(p => match(p));
+
+function countBy(list, fn){
+  const m = new Map();
+  list.forEach(p => [].concat(fn(p)).forEach(k => k && m.set(k, (m.get(k) || 0) + 1)));
+  return [...m].sort((a,b) => b[1] - a[1]);
+}
+
+function chipRow(el, key, getter, order){
+  const base = ALL.filter(p => match(p, key));
+  let entries = countBy(base, getter);
+  if (order) entries = order.map(v => entries.find(e => e[0] === v)).filter(Boolean)
+                        .concat(entries.filter(e => !order.includes(e[0])));
+  if (state[key] && !entries.some(e => e[0] === state[key])) entries.push([state[key], 0]);  // 已選的不要消失
+  const mk = (val, label, n) =>
+    `<button class="chip" data-v="${esc(val)}" aria-pressed="${state[key] === val}">${esc(label)}<span class="n">${n}</span></button>`;
+  el.innerHTML = mk('', '全部', base.length) + entries.map(([v,n]) => mk(v, v, n)).join('');
+  el.querySelectorAll('.chip').forEach(b => b.onclick = () => { state[key] = b.dataset.v; if (key === 'city') state.district = ''; render(); });
+}
+
+function card(p){
+  const s = STATUS[p.status];
+  const cover = p.images && p.images.length
+    ? `<button class="cover" data-gal="${p.id}" aria-label="看 ${esc(p.name)} 的照片"><img loading="lazy" src="${esc(p.images[0])}" alt=""><span class="cnt">${p.images.length > 1 ? p.images.length + ' 張' : ''}</span></button>` : '';
+  return `<article class="card">
+    ${cover}<h3>${esc(p.name)}</h3>
+    <div class="meta">
+      <span><i class="dot" style="background:${s.color}"></i>${s.label}</span>
+      <span>${esc(p.city)}${p.district ? '・' + esc(p.district) : ''}</span>
+      ${p.rating ? `<span class="rate">★ ${p.rating}</span>` : ''}
+      ${userPos && p.dist != null ? `<span>距離約 ${fmtDist(p.dist)}</span>` : ''}
+      ${p.times.length ? `<span>${esc(p.times.join('、'))}</span>` : ''}
+    </div>
+    ${p.note ? `<p class="note">${esc(p.note)}</p>` : ''}
+    ${p.must ? `<div class="must"><b>必點</b> ${esc(p.must)}</div>` : ''}
+    <div class="btns">
+      ${p.gmaps ? `<a class="btn" href="${esc(p.gmaps)}" target="_blank" rel="noopener">地圖</a>` : ''}
+      <a class="btn" href="${navUrl(p)}" target="_blank" rel="noopener">導航</a>
+      <button class="btn" data-locate="${p.id}" ${hasXY(p) ? '' : 'disabled title="還沒有座標"'}>看位置</button>
+    </div>
+  </article>`;
+}
+
+function render(){
+  const tab = TABS.find(t => t.key === state.tab);
+  chipRow($('cities'),   'city',    p => p.city);
+  if (state.city) chipRow($('districts'), 'district', p => p.district);
+  else $('districts').innerHTML = '<span class="hint">先選城市，再選行政區</span>';
+  chipRow($('times'),    'time',    p => p.times, TIME_ORDER);
+  chipRow($('cuisines'), 'cuisine', p => p.cuisines);
+  chipRow($('scenes'),   'scene',   p => p.scenes);
+
+  $('tabs').innerHTML = TABS.map(t =>
+    `<button class="tab" role="tab" data-t="${t.key}" aria-selected="${state.tab === t.key}">${t.label}<span class="n">${ALL.filter(t.test).length}</span></button>`
+  ).join('');
+  $('tabs').querySelectorAll('.tab').forEach(b => b.onclick = () => { state.tab = b.dataset.t; render(); });
+
+  const list = filtered();
+  $('count').textContent = `共 ${list.length} 間`;
+
+  let html = '';
+  if (!list.length){
+    html = '<div class="empty">沒有符合的店，放寬一下篩選看看。</div>';
+  } else if (state.sort === 'group'){
+    const groups = new Map();
+    list.forEach(p => { const k = p.category || '其他'; (groups.get(k) || groups.set(k, []).get(k)).push(p); });
+    html = [...groups].sort((a,b) => b[1].length - a[1].length).map(([k, ps]) =>
+      `<div class="gh">${esc(k)}<small>${ps.length} 間</small></div><div class="grid">${ps.map(card).join('')}</div>`).join('');
+  } else {
+    const ps = state.sort === 'rating' ? [...list].sort((a,b) => (b.rating || 0) - (a.rating || 0))
+             : state.sort === 'near'   ? [...list].sort((a,b) => (a.dist ?? 1e9) - (b.dist ?? 1e9))
+             : list;
+    html = `<div class="grid">${ps.map(card).join('')}</div>`;
+  }
+  $('list').innerHTML = html;
+  $('list').querySelectorAll('[data-gal]').forEach(b => b.onclick = () => openGallery(+b.dataset.gal));
+  $('list').querySelectorAll('[data-locate]').forEach(b => b.onclick = () => locate(+b.dataset.locate));
+
+  // 地圖同步
+  cluster.clearLayers();
+  const shown = list.filter(hasXY);
+  shown.forEach(p => cluster.addLayer(markers.get(p.id)));
+  const fit = shown.filter(p => p.lng < 123);        // 縮放時略過日本等海外點
+  let pts = (fit.length ? fit : shown).map(p => [p.lat, p.lng]), maxZ = 12;
+  if (state.sort === 'near' && userPos){            // 附近模式：看使用者 + 最近的 15 間
+    pts = [[userPos.lat, userPos.lng], ...[...shown].sort((a,b) => (a.dist ?? 1e9) - (b.dist ?? 1e9)).slice(0, 15).map(p => [p.lat, p.lng])];
+    maxZ = 13;
+  }
+  if (pts.length){
+    map.fitBounds(L.latLngBounds(pts), {padding:[30,30], maxZoom:maxZ, animate:!firstFit});
+  }
+  firstFit = false;
+  const miss = list.length - shown.length;
+  $('nocoord').textContent = miss ? `有 ${miss} 間還沒有座標，只出現在清單，不在地圖上。` : '';
+}
+
+function locate(id){
+  const m = markers.get(id);
+  if (!m) return;
+  $('map').scrollIntoView({behavior:'smooth', block:'center'});
+  cluster.zoomToShowLayer(m, () => m.openPopup());
+}
+
+function fmtDist(km){ return km < 1 ? `${Math.round(km * 100) * 10} 公尺` : `${km.toFixed(1)} 公里`; }
+function haversine(a, b, c, d){
+  const r = Math.PI / 180, R = 6371;
+  const x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+
+function openGallery(id){
+  const p = ALL.find(x => x.id === id);
+  if (!p || !p.images.length) return;
+  $('lbimgs').innerHTML = p.images.map(src => `<img src="${esc(src)}" alt="${esc(p.name)}">`).join('');
+  $('lb').hidden = false;
+}
+$('lb').onclick = e => { if (e.target.tagName !== 'IMG') $('lb').hidden = true; };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('lb').hidden = true; });
+
+function findNearby(){
+  const msg = $('geomsg'), btn = $('near');
+  if (!navigator.geolocation || !window.isSecureContext){
+    msg.textContent = '定位需要 https（或 localhost）才能使用';
+    return;
+  }
+  btn.disabled = true; btn.textContent = '定位中…'; msg.textContent = '';
+  navigator.geolocation.getCurrentPosition(pos => {
+    userPos = {lat:pos.coords.latitude, lng:pos.coords.longitude};
+    ALL.forEach(p => { p.dist = hasXY(p) ? haversine(userPos.lat, userPos.lng, p.lat, p.lng) : null; });
+    if (userMarker) userMarker.remove();
+    userMarker = L.circleMarker([userPos.lat, userPos.lng], {radius:8, weight:3, color:'#fff', fillColor:'#3b82f6', fillOpacity:1})
+      .addTo(map).bindTooltip('你在這裡');
+    $('sort').querySelector('[value="near"]').disabled = false;
+    $('radius').hidden = false;
+    state.sort = 'near'; $('sort').value = 'near';
+    btn.disabled = false; btn.textContent = '📍 重新定位';
+    msg.textContent = '直線距離，不是路程';
+    render();
+  }, err => {
+    btn.disabled = false; btn.textContent = '📍 找附近';
+    msg.textContent = err.code === 1 ? '定位被拒絕，請在瀏覽器網址列旁允許位置權限' : '抓不到位置，請稍後再試';
+  }, {enableHighAccuracy:true, timeout:10000, maximumAge:60000});
+}
+
+async function main(){
+  initMap();
+  loadBoundaries();
+  try{
+    ALL = await (await fetch('places.json')).json();
+  }catch(e){
+    $('sub').textContent = '讀不到 places.json。本機預覽請用 python -m http.server，不要直接雙擊開檔。';
+    return;
+  }
+  buildMarkers();
+  const cities = [...new Set(ALL.map(p => p.city))].join('、');
+  $('sub').textContent = `${ALL.length} 間店・${cities}`;
+  $('q').oninput = e => { state.q = e.target.value; render(); };
+  $('sort').onchange = e => { state.sort = e.target.value; render(); };
+  $('near').onclick = findNearby;
+  $('radius').onchange = e => { state.radius = +e.target.value; render(); };
+  render();
+}
+main();
+</script>
+</body>
+</html>
